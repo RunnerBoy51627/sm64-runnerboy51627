@@ -28,6 +28,10 @@
 #include "level_table.h"
 #include "course_table.h"
 #include "rumble_init.h"
+#include "coop.h"
+#include "game_init.h"
+#include "PR/os_cont.h"
+
 
 #define PLAY_MODE_NORMAL 0
 #define PLAY_MODE_PAUSED 2
@@ -238,6 +242,29 @@ void fade_into_special_warp(u32 arg, u32 color) {
 }
 
 void stub_level_update_1(void) {
+    u16 pressed2;
+    u16 held2;
+
+    static s32 sLastControllerBits = -1;
+
+if (sLastControllerBits != gControllerBits ||
+    (gControllerStatuses[0].errnum & CONT_NO_RESPONSE_ERROR) ||
+    (gControllerStatuses[1].errnum & CONT_NO_RESPONSE_ERROR) ||
+    (gControllerStatuses[2].errnum & CONT_NO_RESPONSE_ERROR) ||
+    (gControllerStatuses[3].errnum & CONT_NO_RESPONSE_ERROR)) {
+
+    refresh_controller_connections();
+    sLastControllerBits = gControllerBits;
+}
+
+    pressed2 = gControllers[1].buttonPressed;
+    held2    = gControllers[1].buttonDown;
+
+if (!gCoopActive && (pressed2 & START_BUTTON) && (held2 & L_TRIG)) {
+    //enable_coop();
+    update_coop_state();
+}
+
 }
 
 void load_level_init_text(u32 arg) {

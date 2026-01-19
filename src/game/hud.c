@@ -13,6 +13,7 @@
 #include "area.h"
 #include "save_file.h"
 #include "print.h"
+#include "coop.h"
 
 /* @file hud.c
  * This file implements HUD rendering and power meter animations.
@@ -258,18 +259,18 @@ void render_hud_power_meter(void) {
  * Renders the amount of lives Mario has.
  */
 void render_hud_mario_lives(void) {
-    print_text(GFX_DIMENSIONS_RECT_FROM_LEFT_EDGE(22), HUD_TOP_Y, ","); // 'Mario Head' glyph
-    print_text(GFX_DIMENSIONS_RECT_FROM_LEFT_EDGE(38), HUD_TOP_Y, "*"); // 'X' glyph
-    print_text_fmt_int(GFX_DIMENSIONS_RECT_FROM_LEFT_EDGE(54), HUD_TOP_Y, "%d", gHudDisplay.lives);
+    print_text(GFX_DIMENSIONS_RECT_FROM_LEFT_EDGE(30), HUD_TOP_Y, ","); // 'Mario Head' glyph
+    print_text(GFX_DIMENSIONS_RECT_FROM_LEFT_EDGE(46), HUD_TOP_Y, "*"); // 'X' glyph
+    print_text_fmt_int(GFX_DIMENSIONS_RECT_FROM_LEFT_EDGE(60), HUD_TOP_Y, "%02d", gHudDisplay.lives);
 }
 
 /**
  * Renders the amount of coins collected.
  */
 void render_hud_coins(void) {
-    print_text(168, HUD_TOP_Y, "+"); // 'Coin' glyph
-    print_text(184, HUD_TOP_Y, "*"); // 'X' glyph
-    print_text_fmt_int(198, HUD_TOP_Y, "%d", gHudDisplay.coins);
+    print_text(168, (HUD_TOP_Y - 17), "+"); // 'Coin' glyph
+    print_text(184, (HUD_TOP_Y - 17), "*"); // 'X' glyph
+    print_text_fmt_int(198, (HUD_TOP_Y - 17), "%02d", gHudDisplay.coins);
 }
 
 #ifdef VERSION_JP
@@ -283,22 +284,9 @@ void render_hud_coins(void) {
  * Disables "X" glyph when Mario has 100 stars or more.
  */
 void render_hud_stars(void) {
-    s8 showX = 0;
-
-    if (gHudFlash == 1 && gGlobalTimer & 8) {
-        return;
-    }
-
-    if (gHudDisplay.stars < 100) {
-        showX = 1;
-    }
-
-    print_text(GFX_DIMENSIONS_RECT_FROM_RIGHT_EDGE(HUD_STARS_X), HUD_TOP_Y, "-"); // 'Star' glyph
-    if (showX == 1) {
-        print_text(GFX_DIMENSIONS_RECT_FROM_RIGHT_EDGE(HUD_STARS_X) + 16, HUD_TOP_Y, "*"); // 'X' glyph
-    }
-    print_text_fmt_int((showX * 14) + GFX_DIMENSIONS_RECT_FROM_RIGHT_EDGE(HUD_STARS_X - 16),
-                       HUD_TOP_Y, "%d", gHudDisplay.stars);
+    print_text(168, HUD_TOP_Y, "-"); // 'Coin' glyph
+    print_text(184, HUD_TOP_Y, "*"); // 'X' glyph
+    print_text_fmt_int(198, HUD_TOP_Y, "%02d", gHudDisplay.stars);
 }
 
 /**
@@ -432,6 +420,10 @@ void render_hud(void) {
 #else
         create_dl_ortho_matrix();
 #endif
+render_hud_coins();
+render_hud_stars();
+coop_debug_draw();
+render_no_input_warnings();
 
         if (gCurrentArea != NULL && gCurrentArea->camera->mode == CAMERA_MODE_INSIDE_CANNON) {
             render_hud_cannon_reticle();
@@ -442,11 +434,11 @@ void render_hud(void) {
         }
 
         if (hudDisplayFlags & HUD_DISPLAY_FLAG_COIN_COUNT) {
-            render_hud_coins();
+
         }
 
         if (hudDisplayFlags & HUD_DISPLAY_FLAG_STAR_COUNT) {
-            render_hud_stars();
+
         }
 
         if (hudDisplayFlags & HUD_DISPLAY_FLAG_KEYS) {
@@ -455,7 +447,7 @@ void render_hud(void) {
 
         if (hudDisplayFlags & HUD_DISPLAY_FLAG_CAMERA_AND_POWER) {
             render_hud_power_meter();
-            render_hud_camera_status();
+            // render_hud_camera_status();
         }
 
         if (hudDisplayFlags & HUD_DISPLAY_FLAG_TIMER) {

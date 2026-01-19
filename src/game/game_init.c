@@ -73,6 +73,10 @@ struct Controller *gPlayer1Controller = &gControllers[0];
 struct Controller *gPlayer2Controller = &gControllers[1];
 struct Controller *gPlayer3Controller = &gControllers[2]; // Probably debug only, see note below
 
+void refresh_controller_connections(void);
+void check_controller_hotplug(void);
+
+
 // Title Screen Demo Handler
 struct DemoInput *gCurrDemoInput = NULL;
 u16 gDemoInputListID = 0;
@@ -526,6 +530,7 @@ void read_controller_inputs(void) {
     if (gControllerBits) {
         osRecvMesg(&gSIEventMesgQueue, &gMainReceivedMesg, OS_MESG_BLOCK);
         osContGetReadData(&gControllerPads[0]);
+        check_controller_hotplug();
 #if ENABLE_RUMBLE
         release_rumble_pak_control();
 #endif
@@ -554,7 +559,6 @@ void read_controller_inputs(void) {
             controller->stickMag = 0;
         }
     }
-
     // For some reason, player 1's inputs are copied to player 3's port.
     // This potentially may have been a way the developers "recorded"
     // the inputs for demos, despite record_demo existing.
@@ -566,6 +570,41 @@ void read_controller_inputs(void) {
     gPlayer3Controller->buttonPressed = gPlayer1Controller->buttonPressed;
     gPlayer3Controller->buttonDown = gPlayer1Controller->buttonDown;
 }
+
+void refresh_controller_connections(void) {
+    s32 port;
+    s32 cont;
+
+    osContInit(&gSIEventMesgQueue, &gControllerBits, &gControllerStatuses[0]);
+
+    cont = 0;
+    for (port = 0; port < 4 && cont < 3; port++) {
+        if (gControllerBits & (1 << port)) {
+            gControllers[cont].statusData = &gControllerStatuses[port];
+            gControllers[cont].controllerData = &gControllerPads[port];
+            cont++;
+        }
+    }
+
+    for (; cont < 3; cont++) {
+        gControllers[cont].statusData = NULL;
+        gControllers[cont].controllerData = NULL;
+    }
+}
+
+void check_controller_hotplug(void) {
+    u8 newBits;
+
+    // Re-scan the ports. This updates newBits and gControllerStatuses.
+    osContInit(&gSIEventMesgQueue, &newBits, &gControllerStatuses[0]);
+
+    // If the connected ports changed, rebuild controller->port mapping.
+    if (newBits != gControllerBits) {
+        gControllerBits = newBits;
+        // refresh_controller_connections();
+    }
+}
+
 
 /**
  * Initialize the controller structs to point at the OSCont information.

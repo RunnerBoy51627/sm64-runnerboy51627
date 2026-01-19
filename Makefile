@@ -33,13 +33,13 @@ $(eval $(call validate-option,COMPILER,ido gcc))
 #   eu - builds the 1997 PAL version
 #   sh - builds the 1997 Japanese Shindou version, with rumble pak support
 #   cn - builds the 2003 Chinese iQue version
-VERSION ?= us
+VERSION ?= jp
 $(eval $(call validate-option,VERSION,jp us eu sh cn))
 
 ifeq      ($(VERSION),jp)
   DEFINES   += VERSION_JP=1
-  OPT_FLAGS := -g
-  GRUCODE   ?= f3d_old
+  OPT_FLAGS := -O2
+  GRUCODE   ?= f3d_new
   VERSION_JP_US  ?= true
   VERSION_SH_CN  ?= false
 else ifeq ($(VERSION),us)
@@ -68,8 +68,7 @@ else ifeq ($(VERSION),cn)
   VERSION_SH_CN  ?= true
 endif
 
-TARGET := sm64.$(VERSION)
-
+TARGET := projectplus!.$(VERSION)
 
 # GRUCODE - selects which RSP microcode to use.
 #   f3d_old - default for JP and US versions
@@ -135,7 +134,7 @@ endif
 # COMPARE - whether to verify the SHA-1 hash of the ROM after building
 #   1 - verifies the SHA-1 hash of the selected version of the game
 #   0 - does not verify the hash
-COMPARE ?= 1
+COMPARE ?= 0
 $(eval $(call validate-option,COMPARE,0 1))
 
 TARGET_STRING := sm64.$(VERSION).$(GRUCODE)
@@ -220,7 +219,7 @@ endif
 BUILD_DIR_BASE := build
 # BUILD_DIR is the location where all build artifacts are placed
 BUILD_DIR      := $(BUILD_DIR_BASE)/$(VERSION)
-ROM            := $(BUILD_DIR)/$(TARGET).z64
+ROM            := $(BUILD_DIR)/$(TARGET).n64
 ELF            := $(BUILD_DIR)/$(TARGET).elf
 LIBULTRA       := $(BUILD_DIR)/libultra.a
 LD_SCRIPT      := sm64.ld
