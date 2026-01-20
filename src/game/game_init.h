@@ -41,6 +41,7 @@ extern u8 *gGfxPoolEnd;
 extern struct GfxPool *gGfxPool;
 extern u8 gControllerBits;
 extern s8 gEepromProbe;
+extern s8 gControllerPorts[3]; // logical->physical mapping, -1 if none
 
 extern void (*gGoddardVblankCallback)(void);
 extern struct Controller *gPlayer1Controller;
@@ -72,6 +73,8 @@ void render_init(void);
 void select_gfx_pool(void);
 void display_and_vsync(void);
 void refresh_controller_connections(void);
+void check_controller_hotplug(void);
+void remap_controllers_from_bits(void);
 
 
 #endif // GAME_INIT_H

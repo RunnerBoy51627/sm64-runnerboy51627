@@ -14,6 +14,7 @@
 #include "save_file.h"
 #include "print.h"
 #include "coop.h"
+#include "players.h"
 
 /* @file hud.c
  * This file implements HUD rendering and power meter animations.
@@ -422,8 +423,9 @@ void render_hud(void) {
 #endif
 render_hud_coins();
 render_hud_stars();
-coop_debug_draw();
-render_no_input_warnings();
+
+// coop_debug_draw();
+// render_no_input_warnings();
 
         if (gCurrentArea != NULL && gCurrentArea->camera->mode == CAMERA_MODE_INSIDE_CANNON) {
             render_hud_cannon_reticle();
@@ -453,5 +455,10 @@ render_no_input_warnings();
         if (hudDisplayFlags & HUD_DISPLAY_FLAG_TIMER) {
             render_hud_timer();
         }
+        if (gCurrentArea != NULL && hudDisplayFlags != HUD_DISPLAY_NONE) {
+    render_no_input_warnings();
+    // apply_primary_player_model();
+}
+
     }
 }

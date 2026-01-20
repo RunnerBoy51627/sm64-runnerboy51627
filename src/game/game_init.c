@@ -19,6 +19,10 @@
 #include "segment2.h"
 #include "segment_symbols.h"
 #include "rumble_init.h"
+#include "coop.h"   // near top if needed
+#include "players.h"
+
+s8 gControllerPorts[3] = { -1, -1, -1 };
 
 // First 3 controller slots
 struct Controller gControllers[3];
@@ -75,7 +79,10 @@ struct Controller *gPlayer3Controller = &gControllers[2]; // Probably debug only
 
 void refresh_controller_connections(void);
 void check_controller_hotplug(void);
-
+static void ensure_primary_controller(void);
+static void alias_p2_to_p1_if_needed(void);
+static void ensure_p1_from_p2_if_needed(void);
+static void maybe_rescan_controllers(void);
 
 // Title Screen Demo Handler
 struct DemoInput *gCurrDemoInput = NULL;
@@ -526,15 +533,21 @@ void run_demo_inputs(void) {
 void read_controller_inputs(void) {
     s32 i;
 
-    // If any controllers are plugged in, update the controller information.
+    // NEW: allow port changes to be detected safely
+    maybe_rescan_controllers();
+
     if (gControllerBits) {
         osRecvMesg(&gSIEventMesgQueue, &gMainReceivedMesg, OS_MESG_BLOCK);
         osContGetReadData(&gControllerPads[0]);
-        check_controller_hotplug();
+
+        // NEW: promote P2 -> P1 if P1 has no response
+        ensure_p1_from_p2_if_needed();
+
 #if ENABLE_RUMBLE
         release_rumble_pak_control();
 #endif
     }
+
     run_demo_inputs();
 
     for (i = 0; i < 2; i++) {
@@ -559,6 +572,7 @@ void read_controller_inputs(void) {
             controller->stickMag = 0;
         }
     }
+
     // For some reason, player 1's inputs are copied to player 3's port.
     // This potentially may have been a way the developers "recorded"
     // the inputs for demos, despite record_demo existing.
@@ -571,77 +585,146 @@ void read_controller_inputs(void) {
     gPlayer3Controller->buttonDown = gPlayer1Controller->buttonDown;
 }
 
-void refresh_controller_connections(void) {
+// void UNUSED refresh_controller_connections(void) {
+//     s32 port;
+//     s32 cont = 0;
+//
+//     osContInit(&gSIEventMesgQueue, &gControllerBits, &gControllerStatuses[0]);
+//
+//     for (port = 0; port < 4 && cont < 3; port++) {
+//         if (gControllerBits & (1 << port)) {
+//             gControllers[cont].statusData     = &gControllerStatuses[port];
+//             gControllers[cont].controllerData = &gControllerPads[port];
+//             cont++;
+//         }
+//     }
+//
+//     for (; cont < 3; cont++) {
+//         gControllers[cont].statusData = NULL;
+//         gControllers[cont].controllerData = NULL;
+//     }
+// }
+
+static s32 controller_is_responding(struct Controller *c) {
+    if (c == NULL || c->controllerData == NULL) return 0;
+    return (c->controllerData->errnum & CONT_NO_RESPONSE_ERROR) == 0;
+}
+
+static void ensure_p1_from_p2_if_needed(void) {
+    // If logical P1 isn't responding, but logical P2 is, promote P2 -> P1
+    if (!controller_is_responding(&gControllers[0]) && controller_is_responding(&gControllers[1])) {
+        gControllers[0].statusData     = gControllers[1].statusData;
+        gControllers[0].controllerData = gControllers[1].controllerData;
+    }
+}
+
+static void remap_2_controllers_from_bits(void) {
     s32 port;
     s32 cont;
 
-    osContInit(&gSIEventMesgQueue, &gControllerBits, &gControllerStatuses[0]);
-
     cont = 0;
-    for (port = 0; port < 4 && cont < 3; port++) {
+    for (port = 0; port < 4 && cont < 2; port++) {
         if (gControllerBits & (1 << port)) {
-            gControllers[cont].statusData = &gControllerStatuses[port];
+            gControllers[cont].statusData     = &gControllerStatuses[port];
             gControllers[cont].controllerData = &gControllerPads[port];
             cont++;
         }
     }
 
-    for (; cont < 3; cont++) {
-        gControllers[cont].statusData = NULL;
+    for (; cont < 2; cont++) {
+        gControllers[cont].statusData     = NULL;
         gControllers[cont].controllerData = NULL;
     }
 }
 
-void check_controller_hotplug(void) {
-    u8 newBits;
+static void maybe_rescan_controllers(void) {
+    static u8 sLastBits = 0;
+    static u16 sTimer = 0;
 
-    // Re-scan the ports. This updates newBits and gControllerStatuses.
-    osContInit(&gSIEventMesgQueue, &newBits, &gControllerStatuses[0]);
+    // Only rescan occasionally (every ~30 frames)
+    if ((sTimer++ % 30) != 0) return;
 
-    // If the connected ports changed, rebuild controller->port mapping.
-    if (newBits != gControllerBits) {
-        gControllerBits = newBits;
-        // refresh_controller_connections();
+    osContInit(&gSIEventMesgQueue, &gControllerBits, &gControllerStatuses[0]);
+
+    if (gControllerBits != sLastBits) {
+        sLastBits = gControllerBits;
+        remap_2_controllers_from_bits();
     }
 }
 
+void remap_controllers_from_bits(void) {
+    s32 port;
+    s32 cont;
+
+    cont = 0;
+    for (port = 0; port < 4 && cont < 2; port++) {
+        if (gControllerBits & (1 << port)) {
+            gControllers[cont].statusData     = &gControllerStatuses[port];
+            gControllers[cont].controllerData = &gControllerPads[port];
+            gControllerPorts[cont] = (s8)port;
+            cont++;
+        }
+    }
+
+    for (; cont < 2; cont++) {
+        gControllers[cont].statusData = NULL;
+        gControllers[cont].controllerData = NULL;
+        gControllerPorts[cont] = -1;
+    }
+}
+
+/**
+ * Safe hotplug poll:
+ * - Call osContInit only occasionally (not every frame)
+ * - If bitpattern changes, remap controllers
+ */
+void check_controller_hotplug(void) {
+    static u8 sLastBits = 0;
+    static u16 sTimer = 0;
+    u8 newBits;
+
+    if ((sTimer++ % 30) != 0) {
+        return;
+    }
+
+    // Rescan presence bitpattern
+    osContInit(&gSIEventMesgQueue, &newBits, &gControllerStatuses[0]);
+
+    if (newBits != sLastBits) {
+        sLastBits = newBits;
+        gControllerBits = newBits;
+        remap_controllers_from_bits();
+    }
+}
+
+static void ensure_primary_controller(void) {
+    // If logical controller 0 isn't mapped, try to remap from current bits
+    if (gControllers[0].controllerData == NULL) {
+        remap_controllers_from_bits();
+    }
+}
 
 /**
  * Initialize the controller structs to point at the OSCont information.
  */
 void init_controllers(void) {
-    s16 port, cont;
-
-    // Set controller 1 to point to the set of status/pads for input 1 and
-    // init the controllers.
-    gControllers[0].statusData = &gControllerStatuses[0];
-    gControllers[0].controllerData = &gControllerPads[0];
     osContInit(&gSIEventMesgQueue, &gControllerBits, &gControllerStatuses[0]);
 
-    // Strangely enough, the EEPROM probe for save data is done in this function.
-    // Save Pak detection?
     gEepromProbe = osEepromProbe(&gSIEventMesgQueue);
 
-    // Loop over the 4 ports and link the controller structs to the appropriate
-    // status and pad. Interestingly, although there are pointers to 3 controllers,
-    // only 2 are connected here. The third seems to have been reserved for debug
-    // purposes and was never connected in the retail ROM, thus gPlayer3Controller
-    // cannot be used, despite being referenced in various code.
-    for (cont = 0, port = 0; port < 4 && cont < 2; port++) {
-        // Is controller plugged in?
-        if (gControllerBits & (1 << port)) {
-            // The game allows you to have just 1 controller plugged
-            // into any port in order to play the game. this was probably
-            // so if any of the ports didn't work, you can have controllers
-            // plugged into any of them and it will work.
-#if ENABLE_RUMBLE
-            gControllers[cont].port = port;
-#endif
-            gControllers[cont].statusData = &gControllerStatuses[port];
-            gControllers[cont++].controllerData = &gControllerPads[port];
-        }
+    remap_controllers_from_bits();
+}
+
+static void alias_p2_to_p1_if_needed(void) {
+    // If P1 is missing but P2 exists, treat P2 as P1
+    if (gControllers[0].controllerData == NULL &&
+        gControllers[1].controllerData != NULL) {
+
+        gControllers[0].statusData     = gControllers[1].statusData;
+        gControllers[0].controllerData = gControllers[1].controllerData;
     }
 }
+
 
 // Game thread core
 // ----------------------------------------------------------------------------------------------------

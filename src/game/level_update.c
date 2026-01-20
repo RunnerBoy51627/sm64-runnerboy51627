@@ -31,7 +31,8 @@
 #include "coop.h"
 #include "game_init.h"
 #include "PR/os_cont.h"
-
+#include "PR/os.h"
+#include "players.h"
 
 #define PLAY_MODE_NORMAL 0
 #define PLAY_MODE_PAUSED 2
@@ -253,7 +254,7 @@ if (sLastControllerBits != gControllerBits ||
     (gControllerStatuses[2].errnum & CONT_NO_RESPONSE_ERROR) ||
     (gControllerStatuses[3].errnum & CONT_NO_RESPONSE_ERROR)) {
 
-    refresh_controller_connections();
+    // refresh_controller_connections();
     sLastControllerBits = gControllerBits;
 }
 
@@ -265,6 +266,30 @@ if (!gCoopActive && (pressed2 & START_BUTTON) && (held2 & L_TRIG)) {
     update_coop_state();
 }
 
+}
+
+static s32 p2_is_connected(void) {
+    // This is “connected at boot mapping”; good enough for now.
+    // Later we can add safe re-scan in pause/title if you want port swapping.
+    return gControllers[1].controllerData != NULL
+        && (gControllers[1].controllerData->errnum & CONT_NO_RESPONSE_ERROR) == 0;
+}
+
+void update_p2_join(void) {
+    if (!gCoopActive && p2_is_connected()) {
+        u16 pressed2 = gControllers[1].buttonPressed;
+        u16 held2    = gControllers[1].buttonDown;
+
+        // Example join combo: START + L
+        if ((pressed2 & START_BUTTON) && (held2 & L_TRIG)) {
+            enable_coop();
+        }
+    }
+
+    // Auto-leave if P2 drops
+    if (gCoopActive && !p2_is_connected()) {
+        disable_coop();
+    }
 }
 
 void load_level_init_text(u32 arg) {
@@ -1007,6 +1032,8 @@ s32 play_mode_normal(void) {
 
     area_update_objects();
     update_hud_values();
+    update_primary_character_choice();
+    apply_primary_player_model();
 
     if (gCurrentArea != NULL) {
         update_camera(gCurrentArea->camera);
@@ -1152,6 +1179,10 @@ UNUSED static s32 play_mode_unused(void) {
 
 s32 update_level(void) {
     s32 changeLevel;
+
+    if (gMarioObject != NULL && gCurrentArea != NULL) {
+        apply_primary_player_model();
+    }
 
     switch (sCurrPlayMode) {
         case PLAY_MODE_NORMAL:
